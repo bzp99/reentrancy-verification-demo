@@ -20,7 +20,7 @@ import pathlib
 import subprocess
 import time
 
-from schema import CONTRACTS, ROOT, run, result, emit
+from schema import CONTRACTS, ROOT, net_args, run, result, emit
 
 IMAGE = "vdemo/smtchecker:0.8.26"
 DOCKERFILE_DIR = ROOT / "docker" / "smtchecker"
@@ -112,7 +112,7 @@ def classify(errors, ms):
 
 
 def analyze(filename, contract):
-    cmd = ["docker", "run", "--rm", "-i", IMAGE, "--standard-json"]
+    cmd = ["docker", "run", "--rm", "-i", *net_args(), IMAGE, "--standard-json"]
     inp = standard_json(filename, contract)
     t0 = time.time()
     try:

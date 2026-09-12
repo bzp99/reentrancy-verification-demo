@@ -12,7 +12,7 @@ Slither exits 1 with no stdout and no stderr at all.
 """
 import json
 
-from schema import CONTRACTS, run, result, emit
+from schema import CONTRACTS, net_args, run, result, emit
 from solc_cache import ensure_solc
 
 IMAGE = "trailofbits/eth-security-toolbox:nightly"
@@ -25,7 +25,7 @@ SEVERE = "reentrancy-eth"
 
 
 def analyze(filename, solc_dir):
-    cmd = ["docker", "run", "--rm",
+    cmd = ["docker", "run", "--rm", *net_args(),
            "-v", f"{CONTRACTS}:/src:ro",
            "-v", f"{solc_dir / 'solc'}:/opt/solc:ro",
            "--entrypoint", "slither", IMAGE,
