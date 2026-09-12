@@ -145,6 +145,35 @@ fixtures/           committed known-good results for demo day
 out/                gitignored build output
 ```
 
+## Publishing
+
+The repository is not yet on GitHub. To publish it:
+
+```bash
+# 1. The default gh token cannot push .github/workflows/ - it needs this scope.
+gh auth refresh -s workflow
+
+# 2. Create it public, so Pages is free and the URL is shareable.
+gh repo create <owner>/reentrancy-verification-demo --public --source=. --push
+
+# 3. Push the branch that holds the demo pull request open.
+git push -u origin demo/introduce-reentrancy
+gh pr create --title "Move the state writes below the external call" \
+             --body "Cleaner to do the transfer first and settle the books afterwards."
+```
+
+Then, in the repository settings:
+
+- **Pages → Build and deployment → Source: GitHub Actions.** Not "Deploy from
+  a branch" — the workflow publishes an artifact directly.
+- **Code security → Code scanning: enabled.** Without it the SARIF upload is
+  accepted but nothing is annotated on the pull request.
+
+Leave that pull request open and never merge it. It is a permanent URL showing
+the reentrancy flagged inline on the exact line of the diff, with a red check.
+Keep that tab next to the Pages tab: the page proves the analysis, the PR
+proves the workflow.
+
 ## Demo-day fallback
 
 `render.py` falls back to `fixtures/results.known-good.json` when
