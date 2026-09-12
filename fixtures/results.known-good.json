@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-12T13:35:47+00:00",
-  "commit": "0f06953",
-  "commit_full": "0f06953282fe245075c77b126cc39a3dfc7129db",
+  "generated_at": "2026-09-12T13:49:49+00:00",
+  "commit": "35f9ac2",
+  "commit_full": "35f9ac23f119623e2a7d2ba78a4570ec795079b7",
   "repo": "",
   "property": "assert(totalDeposits <= address(this).balance)",
   "cases": [
@@ -41,16 +41,16 @@
         "vulnerable": {
           "verdict": "violated",
           "headline": "reentrancy-eth - High impact, Medium confidence",
-          "detail": "Reentrancy in VulnerableVault.withdraw() (../../src/VulnerableVault.sol#14-28): External calls: - (ok,None) = msg.sender.call{value: amount}() (../../src/VulnerableVault.sol#20) State variables written after the call(s): - balances[msg.sender] = 0 (../../src/VulnerableVault.sol#23) VulnerableVault.balances (../../src/VulnerableVault.sol#6) can be used in cross function reentrancies: - VulnerableVault.balances (../../src/VulnerableVault.sol#6) - VulnerableVault.deposit() (../../src/VulnerableVault.sol#9-12) - VulnerableVault.withdraw() (../../src/VulnerableVault.sol#14-28)",
+          "detail": "Reentrancy in VulnerableVault.withdraw() (VulnerableVault.sol#14-28): External calls: - (ok,None) = msg.sender.call{value: amount}() (VulnerableVault.sol#20) State variables written after the call(s): - balances[msg.sender] = 0 (VulnerableVault.sol#23) VulnerableVault.balances (VulnerableVault.sol#6) can be used in cross function reentrancies: - VulnerableVault.balances (VulnerableVault.sol#6) - VulnerableVault.deposit() (VulnerableVault.sol#9-12) - VulnerableVault.withdraw() (VulnerableVault.sol#14-28)",
           "trace": [],
-          "duration_ms": 480
+          "duration_ms": 572
         },
         "safe": {
           "verdict": "no_finding",
           "headline": "No reentrancy detector fired",
           "detail": "1 finding(s) of other kinds: low-level-calls.",
           "trace": [],
-          "duration_ms": 483
+          "duration_ms": 588
         }
       }
     },

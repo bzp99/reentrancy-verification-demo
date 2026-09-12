@@ -11,6 +11,7 @@ download solc 0.8.26 and, on a network that cannot reach solc-bin.ethereum.org,
 Slither exits 1 with no stdout and no stderr at all.
 """
 import json
+import re
 
 from schema import CONTRACTS, net_args, run, result, emit
 from solc_cache import ensure_solc
@@ -22,6 +23,15 @@ CASES = {"vulnerable": "VulnerableVault.sol", "safe": "SafeVault.sol"}
 # ether, `reentrancy-benign`/`-events` are weaker patterns. Only the first is
 # the bug this demo is about.
 SEVERE = "reentrancy-eth"
+
+# Slither reports paths relative to its own working directory inside the
+# container, so every reference reads "../../src/VulnerableVault.sol#23".
+# The prefix is noise on a page that shows the file right below the table.
+PATH_NOISE = re.compile(r"\.{0,2}[./]*src/")
+
+
+def clean(text):
+    return PATH_NOISE.sub("", " ".join(text.split()))
 
 
 def analyze(filename, solc_dir):
@@ -47,7 +57,7 @@ def analyze(filename, solc_dir):
             "violated",
             f"{d['check']} - {d.get('impact', '?')} impact, "
             f"{d.get('confidence', '?')} confidence",
-            " ".join(d.get("description", "").split())[:900],
+            clean(d.get("description", ""))[:900],
             duration_ms=ms,
         ), out
 
