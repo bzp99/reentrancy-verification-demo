@@ -42,20 +42,33 @@ jobs:
           if-no-files-found: ignore
 
       # The PR annotation: Slither findings on the exact lines of the diff.
+      # Both contracts are scanned, so a pull request that introduces
+      # reentrancy is annotated whichever file it touches.
       - name: Slither SARIF
         continue-on-error: true
         run: |
           PYTHONPATH=tools python3 -c 'import solc_cache; solc_cache.ensure_solc()'
-          docker run --rm \
-            -v "$PWD/contracts":/src:ro \
-            -v "$PWD/.cache/solc/solc":/opt/solc:ro \
-            --entrypoint slither trailofbits/eth-security-toolbox:nightly \
-            /src/VulnerableVault.sol --solc /opt/solc --sarif - > slither.sarif || true
+          mkdir -p sarif
+          # The repo is mounted at /repo and used as the working directory so
+          # Slither emits `contracts/X.sol` rather than a container-relative
+          # `../../src/X.sol`. Code scanning cannot match the latter to a file
+          # in the repo, and the inline PR annotation silently never appears.
+          for f in VulnerableVault SafeVault; do
+            docker run --rm \
+              -v "$PWD":/repo:ro \
+              -v "$PWD/.cache/solc/solc":/opt/solc:ro \
+              -w /repo \
+              --entrypoint slither trailofbits/eth-security-toolbox:nightly \
+              "contracts/$f.sol" --solc /opt/solc --sarif - > "sarif/$f.sarif" || true
+            # An empty file makes the upload fail; drop it instead.
+            [ -s "sarif/$f.sarif" ] || rm -f "sarif/$f.sarif"
+          done
+          ls -la sarif
       - uses: github/codeql-action/upload-sarif@v3
         if: always()
         continue-on-error: true
         with:
-          sarif_file: slither.sarif
+          sarif_file: sarif
 
   smtchecker:
     runs-on: ubuntu-latest
