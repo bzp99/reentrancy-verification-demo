@@ -22,9 +22,10 @@ permissions:
   id-token: write
   security-events: write
 
-concurrency:
-  group: pages
-  cancel-in-progress: false
+# No workflow-level concurrency. A single `pages` group here would serialize
+# every run of this workflow, so a pull request's analysis would sit queued
+# behind main's ~11-minute Mythril job and look like it never triggered. Only
+# the deploy job actually cannot run twice at once, so the group lives there.
 
 jobs:
   slither:
@@ -130,6 +131,11 @@ jobs:
     needs: build
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    # Pages allows one deployment at a time; queue rather than cancel so a
+    # nightly run cannot discard a push that is mid-publish.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
