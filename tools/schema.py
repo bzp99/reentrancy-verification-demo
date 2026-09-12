@@ -43,13 +43,22 @@ def run(cmd, timeout):
     return rc, out, err, int((time.time() - t0) * 1000)
 
 
-def result(verdict, headline, detail="", trace=None, duration_ms=0):
+def result(verdict, headline, detail="", trace=None, facts=None, duration_ms=0):
+    """One tool's answer about one contract.
+
+    `detail` is prose and should stay to a sentence or two. Anything that is
+    code, a location, or a measured value belongs in `facts` as (label, value)
+    pairs instead - the renderer sets those in mono and aligns them, which is
+    the difference between a readable cell and a wall of run-on tool output.
+    `trace` is a witness: mono lines, shown verbatim.
+    """
     assert verdict in VERDICTS, verdict
     return {
         "verdict": verdict,
         "headline": headline,
         "detail": detail,
         "trace": trace or [],
+        "facts": [list(f) for f in (facts or [])],
         "duration_ms": duration_ms,
     }
 
