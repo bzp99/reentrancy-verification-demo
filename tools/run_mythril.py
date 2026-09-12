@@ -86,21 +86,33 @@ def analyze(filename, solc_dir):
 
     if writes:
         i = writes[0]
+        lines = sorted({w.get("lineno") for w in writes if w.get("lineno")})
         return result(
             "violated",
-            f"SWC-107 {i.get('title', 'Reentrancy')} - "
-            f"{i.get('severity', '?')} severity, line {i.get('lineno', '?')}",
-            " ".join(i.get("description", "").split())[:900],
+            f"SWC-107 {i.get('title', 'Reentrancy')} – "
+            f"{i.get('severity', '?')} severity",
+            "A state write after the external call, reached on a concrete "
+            "transaction sequence.",
+            facts=[
+                ["detector", f"SWC-107 {i.get('title', '')}"],
+                ["severity", str(i.get("severity", "?"))],
+                ["written after", ", ".join(f"L{n}" for n in lines)],
+                ["bound", f"{TX_COUNT} transactions, {EXEC_TIMEOUT}s"],
+            ],
             trace=fmt_trace(i.get("tx_sequence")),
             duration_ms=ms,
         ), out
 
     return result("no_finding",
                   "No state write after the external call",
-                  f"Explored {TX_COUNT} transactions to the configured depth "
-                  f"and {EXEC_TIMEOUT}s timeout. {len(issues)} issue(s) of "
-                  f"other kinds, {len(swc107)} of them SWC-107 pattern "
-                  f"warnings with no state write after the call.",
+                  "Nothing within the bound – an absence of evidence, "
+                  "not a proof.",
+                  facts=[
+                      ["bound", f"{TX_COUNT} transactions, {EXEC_TIMEOUT}s"],
+                      ["other findings",
+                       f"{len(issues)} total, {len(swc107)} SWC-107 pattern "
+                       f"warnings with no write after the call"],
+                  ],
                   duration_ms=ms), out
 
 
@@ -112,7 +124,7 @@ def main():
     for case, fn in CASES.items():
         results[case], raws[case] = analyze(fn, solc_dir)
     emit("mythril", "Mythril",
-         "Symbolic execution over EVM bytecode - Z3",
+         "Bounded symbolic execution over EVM bytecode – Z3",
          ver.strip() or IMAGE.split(":")[-1], can_prove=False,
          results=results, raw=json.dumps(raws, indent=2))
 

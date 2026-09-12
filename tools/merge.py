@@ -25,14 +25,35 @@ CASES = [
     {"id": "vulnerable", "title": "VulnerableVault",
      "subtitle": "Interaction before effects",
      "file": "contracts/VulnerableVault.sol",
-     "highlight_lines": [20, 23, 24]},
+     "highlight_lines": [20, 23, 24],
+     "property_line": 27,
+     # The whole withdraw() body, shown up top as the thing being attacked.
+     "excerpt": [14, 27]},
     {"id": "safe", "title": "SafeVault",
      "subtitle": "Checks-effects-interactions",
      "file": "contracts/SafeVault.sol",
-     "highlight_lines": [18, 19, 21]},
+     "highlight_lines": [18, 19, 21],
+     "property_line": 25,
+     "excerpt": [14, 25]},
 ]
 
 PROPERTY = "assert(totalDeposits <= address(this).balance)"
+
+# The attack, in the fewest steps that still make it land. Content, not
+# presentation, so it lives here rather than in the renderer.
+EXPLOIT = [
+    ("Deposit once",
+     "A contract deposits 1 ether."),
+    ("Call withdraw()",
+     "The vault sends it – <em>before</em> zeroing the balance."),
+    ("Re-enter on receive",
+     "Receiving ether runs the attacker's code, which calls "
+     "<code>withdraw()</code> again – the balance is still 1 ether."),
+    ("Repeat until drained",
+     "Every pass pays out again against the same stale balance."),
+]
+
+EXPLOIT_NOTE = "June 2016: this pattern drained ~3.6M ETH from The DAO."
 
 
 def git(*args, default="unknown"):
@@ -76,6 +97,8 @@ def main():
         "commit_full": git("rev-parse", "HEAD"),
         "repo": git("config", "--get", "remote.origin.url", default=""),
         "property": PROPERTY,
+        "exploit": [list(s) for s in EXPLOIT],
+        "exploit_note": EXPLOIT_NOTE,
         "cases": CASES,
         "tools": tools,
     }

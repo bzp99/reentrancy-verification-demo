@@ -25,6 +25,7 @@ from schema import CONTRACTS, ROOT, net_args, run, result, emit
 IMAGE = "vdemo/smtchecker:0.8.26"
 DOCKERFILE_DIR = ROOT / "docker" / "smtchecker"
 SOLVER = "eld"
+SOLVER_NAME = "Eldarica"
 CHECKER_TIMEOUT_MS = 60000
 
 CASES = {"vulnerable": ("VulnerableVault.sol", "VulnerableVault"),
@@ -65,6 +66,15 @@ def standard_json(filename, contract):
     })
 
 
+def site_of(msg):
+    """Pull `File.sol:27:9` out of solc's formatted diagnostic."""
+    for ln in msg.splitlines():
+        s = ln.strip()
+        if s.startswith("-->"):
+            return s[3:].strip().rstrip(":")
+    return "—"
+
+
 def source_excerpt(msg):
     """Pull the quoted source location out of a formatted CHC diagnostic."""
     lines = []
@@ -84,7 +94,14 @@ def classify(errors, ms):
         msg = e.get("formattedMessage") or e.get("message", "")
         return result("violated",
                       "CHC: assertion violation reachable",
-                      " ".join(e.get("message", "").split())[:1200],
+                      "A reachable state exists in which the solvency "
+                      "assertion does not hold.",
+                      # No `site` fact here: the trace below already quotes
+                      # the offending line with its location.
+                      facts=[
+                          ["engine", "CHC (Constrained Horn Clauses)"],
+                          ["solver", SOLVER_NAME],
+                      ],
                       trace=source_excerpt(msg), duration_ms=ms)
 
     proved = [e for e in errors
@@ -92,11 +109,17 @@ def classify(errors, ms):
               or "check is safe" in e.get("message", "").lower()
               or "proved safe" in e.get("message", "").lower()]
     if proved:
+        e = proved[0]
+        msg = e.get("formattedMessage") or e.get("message", "")
         return result("proved",
                       "CHC: assertion violation check is safe",
-                      "The solvency assertion holds in every reachable state, "
-                      "for unbounded transaction sequences, including "
-                      "re-entrant callbacks from unknown external code.",
+                      "Not an absence of findings – a proof. It covers "
+                      "re-entrant callbacks from code that does not exist yet.",
+                      facts=[
+                          ["engine", "CHC (Constrained Horn Clauses)"],
+                          ["solver", SOLVER_NAME],
+                          ["site", site_of(msg)],
+                      ],
                       duration_ms=ms)
 
     fatal = [e for e in errors if e.get("severity") == "error"]
@@ -146,7 +169,7 @@ def main():
     for case, (fn, contract) in CASES.items():
         results[case], raws[case] = analyze(fn, contract)
     emit("smtchecker", "SMTChecker",
-         f"Constrained Horn Clause model checking - {eld}",
+         f"Constrained Horn Clause model checking – {eld}",
          version, can_prove=True,
          results=results, raw=json.dumps(raws, indent=2))
 

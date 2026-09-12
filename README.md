@@ -66,6 +66,36 @@ make serve     # same, on http://localhost:8000
 `make verify` runs each tool with a leading `-`, so one failure does not stop
 the others. Mythril dominates the wall clock at roughly ten minutes.
 
+## How the page is laid out
+
+Reading order is deliberate: **the attack first, then the verdicts, then the
+contracts.** Someone who reads only the first screen should still get the
+argument.
+
+- **Above the fold:** the claim, the `withdraw()` body being attacked, the
+  four-step exploit, the property, and the full verdict table.
+- **Below the fold:** both contracts in full, as reference.
+
+Two details that took some care:
+
+- **Emphasis carries meaning.** In every listing, everything except the point
+  is dimmed. Red bands mark the statements whose *order* is the bug; teal bands
+  mark the assertion being checked. The same two colours band the table cells,
+  so a cell and the line it is talking about are marked alike. Hovering a
+  listing restores the dimmed lines for anyone who wants to read it all.
+  Caller-controlled builtins (`msg`, `tx`, `this`) are set in the violation
+  colour, because the attacker's reach is the subject.
+- **The table stays above the fold on screens it was not designed for.** CSS
+  height breakpoints tighten the vertical rhythm, and a small script measures
+  what is left and scales the block to close the gap exactly. Without
+  JavaScript the breakpoints still apply.
+
+Syntax highlighting is a ~40-line tokenizer in `render.py` rather than a
+library, because the page must stay self-contained with no network dependency.
+Ligatures are explicitly disabled: a coding font renders `=>` as one glyph and
+`<=` as an inequality sign, which would mean the page shows something that is
+not Solidity.
+
 ## Three things that are not in the textbook
 
 These cost most of the setup time and each will produce a confusing failure if
