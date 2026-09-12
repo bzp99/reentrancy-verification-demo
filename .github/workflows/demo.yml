@@ -127,7 +127,24 @@ jobs:
         if: github.ref == 'refs/heads/main'
         with: { path: out }
 
+  # The only job that is allowed to fail, and the reason a pull request that
+  # reintroduces the bug goes red. Everything above is failure-tolerant on
+  # purpose, so that one broken tool cannot take the published page down; that
+  # tolerance is exactly what makes a separate gate necessary.
+  gate:
+    needs: build
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: demo-page, path: out }
+      - run: python3 tools/check.py
+
   deploy:
+    # Deliberately not gated. The page is generated from whatever the tools
+    # actually reported, so it stays honest even when the gate is red - and a
+    # stale page would be worse than an accurate one showing a regression.
     needs: build
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest

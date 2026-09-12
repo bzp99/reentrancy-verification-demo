@@ -5,7 +5,7 @@
 # The leading `-` on the runner lines is deliberate: one tool failing must not
 # stop the others. merge.py turns a missing result into an `error` verdict.
 
-.PHONY: all pull image verify render demo serve fixture offline clean
+.PHONY: all pull image verify render check demo serve fixture offline clean
 
 SLITHER_IMAGE  := trailofbits/eth-security-toolbox:nightly
 MYTHRIL_IMAGE  := mythril/myth:0.24.8
@@ -32,6 +32,11 @@ verify:
 
 render:
 	python3 tools/render.py
+
+# The gate: fails when the fixed contract stops being provable, or when the
+# vulnerable specimen stops being caught. Everything else is failure-tolerant.
+check:
+	python3 tools/check.py
 
 demo: verify render
 	@echo "open out/index.html"

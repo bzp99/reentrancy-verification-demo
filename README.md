@@ -66,6 +66,31 @@ make serve     # same, on http://localhost:8000
 `make verify` runs each tool with a leading `-`, so one failure does not stop
 the others. Mythril dominates the wall clock at roughly ten minutes.
 
+## The gate
+
+Everything above is failure-tolerant on purpose: a runner that crashes becomes
+an `error` verdict and the page still publishes, because one broken tool should
+not take the whole thing down. That tolerance means the pipeline by itself can
+never fail a build – so the assertion lives in one place, `tools/check.py`:
+
+```bash
+make check
+```
+
+It holds the two claims this repository actually makes:
+
+- **`SafeVault` must stay provably safe.** If a change moves the state writes
+  back below the external call, the proof disappears and the build fails. That
+  is the check that stops the change.
+- **`VulnerableVault` must stay caught.** A canary: if the specimen stops being
+  flagged, the analysis has rotted – a tool bump, a lost solc, a silently empty
+  result – and the page would be quietly wrong.
+
+The prover is held to the strict standard; the scanners may error or time out
+without failing the build, but may never report the fixed contract as violated.
+Publishing is deliberately not gated, since the page is generated from whatever
+the tools actually reported and so stays honest either way.
+
 ## How the page is laid out
 
 Reading order is deliberate: **the attack first, then the verdicts, then the
