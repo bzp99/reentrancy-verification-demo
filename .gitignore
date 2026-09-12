@@ -1,0 +1,18 @@
+out/
+spike/
+.cache/
+__pycache__/
+*.pyc
+
+# Workspace scaffolding artifacts, not part of the project
+.bash_profile
+.bashrc
+.gitconfig
+.gitmodules
+.idea
+.mcp.json
+.profile
+.ripgreprc
+.vscode
+.zprofile
+.zshrc
