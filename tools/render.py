@@ -26,6 +26,12 @@ CSS = """
 :root{--ground:#E9EDF0;--ink:#14181B;--rule:#C3CBD2;--muted:#8A96A1;
 --violated:#8C2F1E;--proved:#1B4D5C;--paper:#F5F7F9;--dim:#3A444C}
 *{box-sizing:border-box}
+/* Coding fonts ligate => into a single glyph and <= into an inequality sign.
+   On a page whose whole point is showing exact Solidity, that is wrong: the
+   contract would read `mapping(address => uint256)` as an implication arrow.
+   calt is the feature most coding fonts use for it. */
+pre,.prop,.trace,.v-head,.ms,.ver,.qed,.cap,.hd small,footer{
+font-variant-ligatures:none;font-feature-settings:"liga" 0,"clig" 0,"calt" 0}
 body{margin:0;background:var(--ground);color:var(--ink);
 font-family:var(--sans);font-size:17px;line-height:1.55;
 -webkit-font-smoothing:antialiased}
@@ -71,8 +77,11 @@ h2{font-size:22px;font-weight:600;margin:0 0 6px}
 pre{font-family:var(--mono);font-size:12.5px;line-height:1.6;
 background:var(--paper);border:1px solid var(--rule);padding:16px;
 overflow-x:auto;margin:10px 0 0}
-pre .hl{background:rgba(140,47,30,.13);display:block;
-margin:0 -16px;padding:0 16px}
+/* Every line is its own block, and the lines are joined with no newline
+   between them. Mixing block spans with literal newlines inside a <pre>
+   renders a blank line after each highlighted line. */
+pre span{display:block;margin:0 -16px;padding:0 16px}
+pre .hl{background:rgba(140,47,30,.13)}
 pre.safe .hl{background:rgba(27,77,92,.12)}
 footer{margin-top:64px;border-top:1px solid var(--rule);padding-top:18px;
 font-family:var(--mono);font-size:12.5px;color:var(--muted);
@@ -84,7 +93,10 @@ a{color:inherit}
 
 GLYPH = {"violated": "✕", "proved": "∎", "no_finding": "○",
          "unknown": "?", "error": "!"}
-LABEL = {"violated": "COUNTEREXAMPLE FOUND", "proved": "PROVED SAFE",
+# "COUNTEREXAMPLE FOUND" would overclaim: Slither pattern-matches and produces
+# no counterexample at all, and Eldarica reports the violation site without
+# concrete values. Only Mythril supplies a witness, which renders as its trace.
+LABEL = {"violated": "VIOLATION FOUND", "proved": "PROVED SAFE",
          "no_finding": "NO FINDING", "unknown": "UNDECIDED",
          "error": "DID NOT RUN"}
 
@@ -110,8 +122,8 @@ def source_block(case):
     lines = []
     for n, ln in enumerate(case["source"].splitlines(), 1):
         esc = html.escape(ln) or "&nbsp;"
-        lines.append(f'<span class="hl">{esc}</span>' if n in hl else esc)
-    return f'<pre class="{cls}">' + "\n".join(lines) + "</pre>"
+        lines.append(f'<span class="{"hl" if n in hl else "ln"}">{esc}</span>')
+    return f'<pre class="{cls}">' + "".join(lines) + "</pre>"
 
 
 def duration(ms):
