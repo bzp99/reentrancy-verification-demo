@@ -1,0 +1,110 @@
+{
+  "generated_at": "2026-09-12T13:35:47+00:00",
+  "commit": "0f06953",
+  "commit_full": "0f06953282fe245075c77b126cc39a3dfc7129db",
+  "repo": "",
+  "property": "assert(totalDeposits <= address(this).balance)",
+  "cases": [
+    {
+      "id": "vulnerable",
+      "title": "VulnerableVault",
+      "subtitle": "Interaction before effects",
+      "file": "contracts/VulnerableVault.sol",
+      "highlight_lines": [
+        20,
+        23,
+        24
+      ],
+      "source": "// SPDX-License-Identifier: MIT\npragma solidity 0.8.26;\n\n/// @notice Deliberately vulnerable. Mirrors the DAO withdrawal pattern.\ncontract VulnerableVault {\n    mapping(address => uint256) public balances;\n    uint256 public totalDeposits;\n\n    function deposit() external payable {\n        balances[msg.sender] += msg.value;\n        totalDeposits += msg.value;\n    }\n\n    function withdraw() external {\n        uint256 amount = balances[msg.sender];\n        require(amount > 0, \"nothing to withdraw\");\n\n        // Interaction before effects: control transfers to an unknown callee\n        // which may re-enter withdraw() while balances[msg.sender] is stale.\n        (bool ok, ) = msg.sender.call{value: amount}(\"\");\n        require(ok, \"transfer failed\");\n\n        balances[msg.sender] = 0;\n        totalDeposits -= amount;\n\n        /// @dev Solvency invariant: the vault never owes more than it holds.\n        assert(totalDeposits <= address(this).balance);\n    }\n}\n"
+    },
+    {
+      "id": "safe",
+      "title": "SafeVault",
+      "subtitle": "Checks-effects-interactions",
+      "file": "contracts/SafeVault.sol",
+      "highlight_lines": [
+        18,
+        19,
+        21
+      ],
+      "source": "// SPDX-License-Identifier: MIT\npragma solidity 0.8.26;\n\n/// @notice Checks-effects-interactions. Same invariant, same assertion.\ncontract SafeVault {\n    mapping(address => uint256) public balances;\n    uint256 public totalDeposits;\n\n    function deposit() external payable {\n        balances[msg.sender] += msg.value;\n        totalDeposits += msg.value;\n    }\n\n    function withdraw() external {\n        uint256 amount = balances[msg.sender];\n        require(amount > 0, \"nothing to withdraw\");\n\n        balances[msg.sender] = 0;\n        totalDeposits -= amount;\n\n        (bool ok, ) = msg.sender.call{value: amount}(\"\");\n        require(ok, \"transfer failed\");\n\n        /// @dev Solvency invariant: the vault never owes more than it holds.\n        assert(totalDeposits <= address(this).balance);\n    }\n}\n"
+    }
+  ],
+  "tools": [
+    {
+      "id": "slither",
+      "name": "Slither",
+      "technique": "Static analysis - dataflow over SlithIR",
+      "version": "0.11.6",
+      "can_prove": false,
+      "results": {
+        "vulnerable": {
+          "verdict": "violated",
+          "headline": "reentrancy-eth - High impact, Medium confidence",
+          "detail": "Reentrancy in VulnerableVault.withdraw() (../../src/VulnerableVault.sol#14-28): External calls: - (ok,None) = msg.sender.call{value: amount}() (../../src/VulnerableVault.sol#20) State variables written after the call(s): - balances[msg.sender] = 0 (../../src/VulnerableVault.sol#23) VulnerableVault.balances (../../src/VulnerableVault.sol#6) can be used in cross function reentrancies: - VulnerableVault.balances (../../src/VulnerableVault.sol#6) - VulnerableVault.deposit() (../../src/VulnerableVault.sol#9-12) - VulnerableVault.withdraw() (../../src/VulnerableVault.sol#14-28)",
+          "trace": [],
+          "duration_ms": 480
+        },
+        "safe": {
+          "verdict": "no_finding",
+          "headline": "No reentrancy detector fired",
+          "detail": "1 finding(s) of other kinds: low-level-calls.",
+          "trace": [],
+          "duration_ms": 483
+        }
+      }
+    },
+    {
+      "id": "mythril",
+      "name": "Mythril",
+      "technique": "Symbolic execution over EVM bytecode - Z3",
+      "version": "0.24.8",
+      "can_prove": false,
+      "results": {
+        "vulnerable": {
+          "verdict": "violated",
+          "headline": "SWC-107 State access after external call - Medium severity, line 23",
+          "detail": "Write to persistent state following external call The contract account state is accessed after an external call to a user defined address. To prevent reentrancy issues, consider accessing the state only before the call, especially if the callee is untrusted. Alternatively, a reentrancy lock can be used to prevent untrusted callees from re-entering the contract in an intermediate state.",
+          "trace": [
+            "call deposit()  value=0x1",
+            "call withdraw()  value=0x0"
+          ],
+          "duration_ms": 330653
+        },
+        "safe": {
+          "verdict": "no_finding",
+          "headline": "No state write after the external call",
+          "detail": "Explored 3 transactions to the configured depth and 300s timeout. 3 issue(s) of other kinds, 2 of them SWC-107 pattern warnings with no state write after the call.",
+          "trace": [],
+          "duration_ms": 318027
+        }
+      }
+    },
+    {
+      "id": "smtchecker",
+      "name": "SMTChecker",
+      "technique": "Constrained Horn Clause model checking - Eldarica v2.3",
+      "version": "0.8.26+commit.8a97fa7a.Linux.g++",
+      "can_prove": true,
+      "results": {
+        "vulnerable": {
+          "verdict": "violated",
+          "headline": "CHC: assertion violation reachable",
+          "detail": "CHC: Assertion violation happens here.",
+          "trace": [
+            "--> VulnerableVault.sol:27:9:",
+            "27 |         assert(totalDeposits <= address(this).balance);"
+          ],
+          "duration_ms": 3185
+        },
+        "safe": {
+          "verdict": "proved",
+          "headline": "CHC: assertion violation check is safe",
+          "detail": "The solvency assertion holds in every reachable state, for unbounded transaction sequences, including re-entrant callbacks from unknown external code.",
+          "trace": [],
+          "duration_ms": 3138
+        }
+      }
+    }
+  ]
+}

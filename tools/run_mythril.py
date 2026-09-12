@@ -24,7 +24,7 @@ are easy to get wrong again:
 """
 import json
 
-from schema import CONTRACTS, run, result, emit
+from schema import CONTRACTS, net_args, run, result, emit
 from solc_cache import SOLC_VERSION, ensure_solc
 
 IMAGE = "mythril/myth:0.24.8"
@@ -39,20 +39,27 @@ WRITE_AFTER_CALL = "write to persistent state following external call"
 
 
 def fmt_trace(tx_seq):
-    """Compress Mythril's tx_sequence into a few readable lines."""
+    """Compress Mythril's tx_sequence into a few readable lines.
+
+    The first step is always the deployment, which Mythril labels "unknown".
+    It carries no information for a reader and just dilutes the two calls that
+    actually matter, so drop it.
+    """
     if not tx_seq:
         return []
     steps = tx_seq.get("steps", []) if isinstance(tx_seq, dict) else []
     lines = []
-    for s in steps[:6]:
-        name = s.get("name") or s.get("input", "")[:10] or "(fallback)"
+    for s in steps:
+        name = s.get("name") or ""
+        if not name or name == "unknown":
+            continue
         val = s.get("value", "0x0")
         lines.append(f"call {name}  value={val}")
-    return lines
+    return lines[:6]
 
 
 def analyze(filename, solc_dir):
-    cmd = ["docker", "run", "--rm",
+    cmd = ["docker", "run", "--rm", *net_args(),
            "-v", f"{CONTRACTS}:/src:ro",
            "-v", f"{solc_dir}:/opt/solcx",
            "-e", "SOLCX_BINARY_PATH=/opt/solcx",

@@ -7,6 +7,7 @@ so a runner behaves identically whether invoked from the Makefile, from CI, or
 by hand from a subdirectory.
 """
 import json
+import os
 import pathlib
 import subprocess
 import time
@@ -17,6 +18,16 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 CONTRACTS = ROOT / "contracts"
 RAW = ROOT / "out" / "raw"
 NORM = ROOT / "out" / "normalized"
+
+
+def net_args():
+    """`DEMO_OFFLINE=1` cuts the containers off the network entirely.
+
+    Use it for the offline rehearsal: every tool is supposed to work from the
+    local solc cache, and this is the only way to be sure none of them is
+    quietly reaching for solc-bin.
+    """
+    return ["--network", "none"] if os.environ.get("DEMO_OFFLINE") else []
 
 
 def run(cmd, timeout):

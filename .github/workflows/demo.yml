@@ -1,0 +1,125 @@
+# Build the verification page and publish it to Pages.
+#
+# _Authored by Claude Code_ - 2026-09-12.
+#
+# The three analyses run as independent jobs so a slow or broken tool cannot
+# take the page down with it: each is continue-on-error, uploads whatever it
+# produced, and merge.py turns anything missing into an `error` verdict.
+
+name: verify and publish
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 5 * * *"     # nightly, so the page timestamp stays fresh
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  security-events: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  slither:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: mkdir -p out/raw out/normalized
+      - run: python3 tools/run_slither.py
+        continue-on-error: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: n-slither
+          path: out/normalized/
+          if-no-files-found: ignore
+
+      # The PR annotation: Slither findings on the exact lines of the diff.
+      - name: Slither SARIF
+        continue-on-error: true
+        run: |
+          PYTHONPATH=tools python3 -c 'import solc_cache; solc_cache.ensure_solc()'
+          docker run --rm \
+            -v "$PWD/contracts":/src:ro \
+            -v "$PWD/.cache/solc/solc":/opt/solc:ro \
+            --entrypoint slither trailofbits/eth-security-toolbox:nightly \
+            /src/VulnerableVault.sol --solc /opt/solc --sarif - > slither.sarif || true
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        continue-on-error: true
+        with:
+          sarif_file: slither.sarif
+
+  smtchecker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: mkdir -p out/raw out/normalized
+      # Builds vdemo/smtchecker (stock solc + Eldarica) on first use, because
+      # no published solc binary contains a Horn solver.
+      - run: python3 tools/run_smtchecker.py
+        continue-on-error: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: n-smtchecker
+          path: out/normalized/
+          if-no-files-found: ignore
+
+  mythril:
+    runs-on: ubuntu-latest
+    # Two analyses at a 300s execution timeout each, plus image pull.
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - run: mkdir -p out/raw out/normalized
+      - run: python3 tools/run_mythril.py
+        continue-on-error: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: n-mythril
+          path: out/normalized/
+          if-no-files-found: ignore
+
+  build:
+    needs: [slither, smtchecker, mythril]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/download-artifact@v4
+        with:
+          path: dl
+          pattern: n-*
+          merge-multiple: true
+      - run: |
+          mkdir -p out/normalized
+          cp -v dl/*.json out/normalized/ || true
+      # Nonzero only if every tool failed; the page is still worth building.
+      - run: python3 tools/merge.py || true
+      - run: python3 tools/render.py
+      - run: ls -la out
+      - uses: actions/upload-artifact@v4
+        with: { name: demo-page, path: out/ }
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main'
+        with: { path: out }
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
