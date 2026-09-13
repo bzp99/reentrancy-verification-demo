@@ -15,11 +15,11 @@ contract SafeVault {
         uint256 amount = balances[msg.sender];
         require(amount > 0, "nothing to withdraw");
 
-        balances[msg.sender] = 0;
-        totalDeposits -= amount;
-
         (bool ok, ) = msg.sender.call{value: amount}("");
         require(ok, "transfer failed");
+
+        balances[msg.sender] = 0;
+        totalDeposits -= amount;
 
         /// @dev Solvency invariant: the vault never owes more than it holds.
         assert(totalDeposits <= address(this).balance);
