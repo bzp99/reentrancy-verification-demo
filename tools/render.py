@@ -24,6 +24,7 @@ it, then the full contracts as reference material below the fold.
 import argparse
 import base64
 import html
+import itertools
 import json
 import pathlib
 import re
@@ -124,7 +125,7 @@ CSS = """
 .mono,pre,code,.prop,.trace,.v-head,.ms,.ver,.qed,.cap,.hd small,footer,
 .fact b,.stepn,.eyebrow{
 font-variant-ligatures:none;font-feature-settings:"liga" 0,"clig" 0,"calt" 0}
-html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
 body{margin:0;background:var(--ground);color:var(--ink);
 font-family:var(--sans);font-size:16px;line-height:1.5;
 -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
@@ -146,6 +147,10 @@ h1 em{font-style:normal;color:var(--proved)}
    fold together with the verdict table. */
 .hero{display:grid;grid-template-columns:minmax(272px,.84fr) 1.1fr 1.16fr;
 gap:20px;align-items:stretch}
+/* Grid and flex children default to min-width:auto, so the widest code line
+   would set the track width and push the whole page into a horizontal scroll.
+   The listings scroll inside themselves instead. */
+.hero>*,.srcs>*,.grid>*,.row>*,.codewrap,.panel{min-width:0}
 .hero>.lead{display:flex;flex-direction:column}
 .panel{background:var(--paper);border:1px solid var(--rule)}
 .ph{font-family:var(--mono);font-size:10px;letter-spacing:.13em;
@@ -154,15 +159,43 @@ border-bottom:1px solid var(--rule);display:flex;justify-content:space-between}
 .ph b{font-weight:600;color:var(--violated)}
 
 .steps{list-style:none;margin:0;padding:9px 14px 10px;flex:1}
-.steps li{display:grid;grid-template-columns:20px 1fr;gap:10px;
-padding:4px 0;font-size:12.5px;line-height:1.38;color:var(--dim);
-border-top:1px solid var(--rule)}
+.steps li{border-top:1px solid var(--rule)}
 .steps li:first-child{border-top:0}
+/* The whole step is the control: a comfortable target with a finger, and one
+   tab stop with a keyboard. */
+.step{display:grid;grid-template-columns:20px 1fr;gap:10px;width:100%;
+padding:6px 0;font:inherit;font-size:12.5px;line-height:1.38;color:var(--dim);
+background:none;border:0;text-align:left;cursor:pointer;
+border-radius:3px;transition:background .15s ease}
+.step:hover{background:rgba(140,47,30,.05)}
+.step[aria-pressed="true"]{background:var(--violated-soft)}
+.step[aria-pressed="true"] .stepn{background:var(--violated);color:#fff}
 .stepn{width:20px;height:20px;border:1px solid var(--violated);
 color:var(--violated);border-radius:50%;font-size:10.5px;display:grid;
-place-items:center;margin-top:1px}
+place-items:center;margin-top:1px;transition:background .15s ease,color .15s}
 .steps b{display:block;color:var(--ink);font-weight:600;font-size:13.5px;
 margin-bottom:1px}
+.hint{font-weight:600;color:var(--violated)}
+
+/* Swap the listing for the fixed contract in place, so the two statements are
+   seen to move above the call rather than described as having moved. */
+.swap{font:inherit;font-family:var(--mono);font-size:10px;letter-spacing:.1em;
+text-transform:uppercase;color:var(--violated);background:none;cursor:pointer;
+border:1px solid currentColor;border-radius:2px;padding:2px 7px;
+transition:color .15s ease,background .15s ease}
+.swap:hover{background:var(--violated-soft)}
+.swap[aria-pressed="true"]{color:var(--proved);background:var(--proved-soft)}
+
+/* Disclosure on a hollow cell. The cell stays visually empty - that emptiness
+   is the argument - but what the tool said is one tap away. */
+.disclose{font:inherit;font-family:var(--mono);font-size:10px;
+letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+background:none;border:0;border-bottom:1px dotted currentColor;padding:2px 0;
+margin-top:10px;cursor:pointer}
+.disclose:hover{color:var(--ink)}
+.disclose::after{content:" \\203a";display:inline-block;transition:transform .15s}
+.disclose[aria-expanded="true"]::after{transform:rotate(90deg)}
+.more{margin-top:8px;padding-top:8px;border-top:1px solid var(--rule)}
 .steps code{font-family:var(--mono);font-size:11.5px;
 background:var(--violated-soft);padding:0 3px;border-radius:2px}
 .note{margin:0;padding:6px 13px;border-top:1px solid var(--rule);
@@ -188,9 +221,18 @@ pre.code .ln::before{content:attr(data-n);display:inline-block;width:3.2em;
 padding-right:1.1em;text-align:right;color:var(--muted);opacity:.55;
 user-select:none;-webkit-user-select:none}
 /* Dimmed by default so the eye lands on the point; hovering the listing
-   brings the rest back for anyone who actually wants to read it. */
+   brings the rest back for anyone who actually wants to read it. Touch has no
+   hover, so .revealed is the tap equivalent. */
 pre.code .dim{opacity:.42;transition:opacity .2s ease}
-pre.code:hover .dim{opacity:.82}
+pre.code:hover .dim,pre.code.revealed .dim{opacity:.82}
+
+/* While a step is selected it owns the listing: only its lines are lit, and
+   the standing red/teal banding steps out of the way so the two kinds of
+   emphasis never argue. */
+pre.code.stepping .ln{opacity:.22;background:none;box-shadow:none}
+pre.code.stepping .ln.on{opacity:1;background:var(--violated-soft);
+box-shadow:inset 3px 0 0 var(--violated)}
+pre.code .ln{transition:opacity .18s ease,background .18s ease}
 pre.code .hl{background:var(--violated-soft);opacity:1;
 box-shadow:inset 3px 0 0 var(--violated)}
 pre.code.safe .hl{background:var(--proved-soft);
@@ -213,7 +255,10 @@ flex-wrap:wrap}
 .sec p{margin:0;font-size:13.5px;color:var(--muted)}
 .grid{display:grid;grid-template-columns:178px 1fr 1fr;gap:1px;
 background:var(--rule);border:1px solid var(--rule)}
-.grid>*{background:var(--paper);padding:7px 12px}
+/* The wrapper exists only for the phone layout; on a wide screen its children
+   must sit in the grid as if it were not there. */
+.row{display:contents}
+.grid>*,.row>*{background:var(--paper);padding:7px 12px}
 .hd{background:var(--ground);font-weight:650;font-size:14px;padding:7px 12px}
 .hd small{display:block;font-weight:400;color:var(--muted);
 font-family:var(--mono);font-size:11px;margin-top:2px;letter-spacing:.02em}
@@ -246,8 +291,7 @@ rgba(18,80,95,.02)),var(--paper)}
    there is nothing to point at. */
 .cell-violated{box-shadow:inset 3px 0 0 var(--violated)}
 .cell-proved{box-shadow:inset 3px 0 0 var(--proved)}
-.grid>div[class^="cell-"]:hover{outline:1px solid var(--muted);
-outline-offset:-1px}
+.cell:hover{outline:1px solid var(--muted);outline-offset:-1px}
 .headline{font-size:13px;font-weight:600;margin-top:7px;color:var(--ink)}
 .detail{font-size:12.5px;margin-top:3px;color:var(--dim);max-width:52ch;
 line-height:1.4}
@@ -277,9 +321,55 @@ font-family:var(--mono);font-size:11.5px;color:var(--muted);
 display:flex;flex-wrap:wrap;gap:20px}
 a{color:inherit}
 
+/* ---------------------------------------------------------------- narrow
+   Below 980px the three-column hero and the verdict table both stop working,
+   so the page reflows rather than shrinking. Nothing here is a phone-only
+   compromise: the same content, ordered the same way, one column wide. */
 @media (max-width:980px){
-.hero,.srcs,.grid{grid-template-columns:1fr}
-.hd{border-top:1px solid var(--rule)}}
+.wrap{padding:14px 18px 56px}
+.hero,.srcs{grid-template-columns:1fr;gap:16px}
+.lead{order:-1}
+h1{font-size:clamp(24px,6vw,30px)}
+.lede{font-size:14px}
+.prop{margin-top:0;padding-top:14px}
+.prop .v{font-size:12.5px}
+
+/* The table becomes one card per tool. The column headers are gone, so each
+   verdict names its own contract from data-case. */
+.grid{display:block;background:none;border:0}
+.row{display:block;border:1px solid var(--rule);background:var(--paper);
+margin-bottom:14px}
+.row>*{padding:12px 14px}
+.hd{display:none}
+.toolcell{border-bottom:1px solid var(--rule);background:var(--ground)}
+.cell{border-top:1px solid var(--rule)}
+.cell::before{content:attr(data-case);display:block;font-family:var(--mono);
+font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+color:var(--muted);margin-bottom:7px}
+.cell-violated,.cell-proved{box-shadow:inset 0 0 0 0}
+.cell-violated{border-left:3px solid var(--violated)}
+.cell-proved{border-left:3px solid var(--proved)}
+.detail{max-width:none}
+
+/* Comfortable targets, and room for a thumb. */
+.step{padding:10px 0;font-size:13.5px}
+.steps b{font-size:14px}
+.disclose{padding:8px 0;font-size:11px}
+.swap{padding:6px 10px;font-size:10.5px}
+pre.code{font-size:12px;line-height:1.6}
+.difference{margin-top:32px;padding-top:22px}
+footer{gap:10px;flex-direction:column}}
+
+/* ------------------------------------------------------------------ phone */
+@media (max-width:560px){
+.wrap{padding:12px 14px 48px}
+pre.code{font-size:11.5px}
+pre.code .ln::before{width:2.4em;padding-right:.7em}
+.v-head{font-size:11.5px;flex-wrap:wrap}
+.ms{margin-left:0;width:100%;padding-left:25px}
+.facts{grid-template-columns:1fr;gap:1px 0}
+.facts i{margin-top:5px}
+.note{white-space:normal}}
 
 /* Keeping the verdict table above the fold is the whole point of the layout,
    and a projector is rarely the height of the laptop it was designed on. These
@@ -287,7 +377,10 @@ a{color:inherit}
 /* 1030 rather than 940: the uncompressed layout needs about 1020px of
    viewport, so anything below that takes the tighter rhythm. A lower
    threshold leaves a dead band where the last row falls just off screen. */
-@media (max-height:1030px){
+   The min-width guard matters: on a phone in landscape the viewport is short,
+   but the page has already reflowed to one column and there is no fold to
+   keep anything above. */
+@media (max-height:1030px) and (min-width:981px){
 .wrap{padding-top:8px}
 h1{font-size:25px;margin-bottom:7px}
 .lede{font-size:12.5px}
@@ -313,7 +406,7 @@ pre.code{font-size:10.5px;line-height:1.5;padding:8px 0}
 
 /* Likewise: the mid layout needs about 900px, so the aggressive rhythm has to
    start just above that rather than at 820. */
-@media (max-height:910px){
+@media (max-height:910px) and (min-width:981px){
 .eyebrow{display:none}
 h1{font-size:22px;margin-bottom:6px}
 .lede{font-size:12px}
@@ -344,23 +437,136 @@ pre.code .dim{opacity:.75}}
 """
 
 
-AUTOFIT_JS = """
-/* Keep the verdict table above the fold on whatever screen this is shown on.
-   The CSS height breakpoints get close; this closes the gap exactly, because
-   a projector is never quite the height you tuned for. `zoom` reflows rather
-   than merely painting smaller, so one measure-and-set pass converges.
-   Progressive enhancement: without JS the breakpoints still apply. */
+PAGE_JS = """
+/* Everything here is progressive enhancement: with JavaScript off the page is
+   the same document, just not walkable. */
 (function () {
+  'use strict';
+
+  var WIDE = 981;                       // matches the CSS layout breakpoint
+  var panel = document.getElementById('codepanel');
+  var steps = [].slice.call(document.querySelectorAll('.step'));
+  var swap = document.querySelector('.swap');
+  var fname = document.querySelector('.fname');
+
+  function visibleCode() {
+    var wrap = panel && panel.querySelector('.codewrap:not([hidden])');
+    return wrap ? wrap.querySelector('pre.code') : null;
+  }
+
+  /* ---- walking the attack ------------------------------------------------
+     Selecting a step lights the lines it is about and dims everything else,
+     so the story is told against the code rather than beside it. */
+  var active = -1;
+
+  function clearStep() {
+    active = -1;
+    steps.forEach(function (b) { b.setAttribute('aria-pressed', 'false'); });
+    [].forEach.call(document.querySelectorAll('pre.code'), function (pre) {
+      pre.classList.remove('stepping');
+      [].forEach.call(pre.querySelectorAll('.ln.on'), function (ln) {
+        ln.classList.remove('on');
+      });
+    });
+  }
+
+  function selectStep(i) {
+    if (i < 0 || i >= steps.length) return;
+    if (i === active) { clearStep(); return; }
+    clearStep();
+    active = i;
+    var btn = steps[i];
+    btn.setAttribute('aria-pressed', 'true');
+    var pre = visibleCode();
+    if (!pre) return;
+    var wanted = (btn.dataset.lines || '').split(',').filter(Boolean);
+    if (!wanted.length) return;
+    pre.classList.add('stepping');
+    var first = null;
+    wanted.forEach(function (n) {
+      var ln = pre.querySelector('.ln[data-n="' + n + '"]');
+      if (ln) { ln.classList.add('on'); first = first || ln; }
+    });
+    /* On a phone the listing sits above the steps, so the lines a step just
+       lit are off-screen. Bring them to the reader rather than making them
+       hunt for the thing they tapped. */
+    if (first && window.innerWidth < WIDE) {
+      var calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      first.scrollIntoView({ behavior: calm ? 'auto' : 'smooth',
+                             block: 'center' });
+    }
+  }
+
+  steps.forEach(function (btn, i) {
+    btn.addEventListener('click', function () { selectStep(i); });
+  });
+
+  /* ---- the fix, in place ------------------------------------------------ */
+  if (swap && panel) {
+    swap.addEventListener('click', function () {
+      var showingFix = swap.getAttribute('aria-pressed') === 'true';
+      var next = showingFix ? 'vulnerable' : 'safe';
+      var wraps = panel.querySelectorAll('.codewrap');
+      if (wraps.length < 2) return;
+      clearStep();                      // steps describe the broken version
+      [].forEach.call(wraps, function (w) {
+        w.hidden = w.dataset.which !== next;
+        if (!w.hidden && fname) fname.textContent = w.dataset.file || '';
+      });
+      swap.setAttribute('aria-pressed', showingFix ? 'false' : 'true');
+      swap.textContent = showingFix ? 'show the fix' : 'show the bug';
+    });
+  }
+
+  /* ---- what a hollow cell reported -------------------------------------- */
+  [].forEach.call(document.querySelectorAll('.disclose'), function (btn) {
+    btn.addEventListener('click', function () {
+      var open = btn.getAttribute('aria-expanded') === 'true';
+      var body = document.getElementById(btn.getAttribute('aria-controls'));
+      btn.setAttribute('aria-expanded', open ? 'false' : 'true');
+      if (body) body.hidden = open;
+    });
+  });
+
+  /* ---- touch has no hover, so tapping a listing un-dims it --------------- */
+  if (window.matchMedia && matchMedia('(hover: none)').matches) {
+    [].forEach.call(document.querySelectorAll('pre.code'), function (pre) {
+      pre.addEventListener('click', function () {
+        pre.classList.toggle('revealed');
+      });
+    });
+  }
+
+  /* ---- presenting from the keyboard ------------------------------------- */
+  document.addEventListener('keydown', function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    var tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea') return;
+    if (e.key === 'ArrowRight') { selectStep(active + 1); e.preventDefault(); }
+    else if (e.key === 'ArrowLeft') {
+      selectStep(active < 0 ? steps.length - 1 : active - 1); e.preventDefault();
+    } else if (e.key === 'Escape') { clearStep(); }
+  });
+
+  /* ---- keep the table above the fold ------------------------------------
+     The CSS height breakpoints get close; this closes the gap exactly,
+     because a projector is never quite the height you tuned for. `zoom`
+     reflows rather than merely painting smaller, so one pass converges.
+     Never on a narrow screen: there the page has reflowed to one column and
+     scrolling is the right answer, not shrinking it to illegibility. */
   var fold = document.querySelector('.fold');
   var grid = document.querySelector('.grid');
-  if (!fold || !grid) return;
   var MIN = 0.68, PAD = 10;
+
   function fit() {
+    if (!fold || !grid) return;
+    if (window.innerWidth < WIDE) { fold.style.zoom = ''; return; }
     fold.style.zoom = '1';
     var bottom = grid.getBoundingClientRect().bottom;
     var avail = window.innerHeight - PAD;
     if (bottom > avail) fold.style.zoom = Math.max(MIN, avail / bottom);
   }
+
   fit();
   var t;
   addEventListener('resize', function () {
@@ -406,33 +612,53 @@ def fonts_css():
     return "\n".join(faces)
 
 
-def cell(res):
-    v = res["verdict"]
-    # A hollow cell carries no visible prose, but the analysis did say
-    # something - keep it reachable rather than throwing it away.
-    tip = ""
-    if v == "no_finding":
-        note = " ".join(x for x in (res.get("headline"), res.get("detail")) if x)
-        if note:
-            tip = f' title="{html.escape(note, quote=True)}"'
+HOLLOW = {"no_finding", "unknown", "error"}
+_uid = itertools.count(1)
 
+
+def body_parts(res):
+    """Headline, prose and facts - the substance of a cell, in reading order."""
+    parts = []
+    if res.get("headline"):
+        parts.append(f'<div class="headline">'
+                     f'{html.escape(res["headline"])}</div>')
+    if res.get("detail"):
+        parts.append(f'<div class="detail">{html.escape(res["detail"])}</div>')
+    if res.get("facts"):
+        rows = "".join(
+            f'<i>{html.escape(str(k))}</i>'
+            f'<span class="fact"><b>{html.escape(str(val))}</b></span>'
+            for k, val in res["facts"])
+        parts.append(f'<div class="facts">{rows}</div>')
+    return parts
+
+
+def cell(res, case_title):
+    """One verdict.
+
+    A hollow cell stays visually empty, because the emptiness is the argument.
+    But the tool did say something, and hiding that in a `title` tooltip made
+    it unreachable on any touch device - so it goes behind a disclosure button
+    instead, which works with a finger and reads well out loud: "it reported
+    nothing, and here is the nothing it reported".
+    """
+    v = res["verdict"]
+    label = html.escape(case_title, quote=True)
     parts = [f'<div class="v-head v-{v}"><span class="g">{GLYPH[v]}</span>'
              f'<span>{LABEL[v]}</span>'
              f'<span class="ms">{duration(res["duration_ms"])}</span></div>']
 
-    if v != "no_finding":
-        if res.get("headline"):
-            parts.append(f'<div class="headline">'
-                         f'{html.escape(res["headline"])}</div>')
-        if res.get("detail"):
-            parts.append(f'<div class="detail">'
-                         f'{html.escape(res["detail"])}</div>')
-        if res.get("facts"):
-            rows = "".join(
-                f'<i>{html.escape(str(k))}</i>'
-                f'<span class="fact"><b>{html.escape(str(val))}</b></span>'
-                for k, val in res["facts"])
-            parts.append(f'<div class="facts">{rows}</div>')
+    if v in HOLLOW:
+        inner = "".join(body_parts(res))
+        if inner:
+            i = next(_uid)
+            parts.append(
+                f'<button class="disclose" type="button" aria-expanded="false" '
+                f'aria-controls="m{i}">what it reported</button>'
+                f'<div class="more" id="m{i}" hidden>{inner}</div>')
+    else:
+        parts.extend(body_parts(res))
+
     if res.get("trace"):
         parts.append('<div class="trace">'
                      + html.escape("\n".join(res["trace"])) + "</div>")
@@ -440,25 +666,50 @@ def cell(res):
         parts.append('<div class="qed"><span>∎</span>'
                      '<em style="font-style:normal">Every reachable state, '
                      'unbounded depth.</em></div>')
-    return f'<div class="cell-{v}"{tip}>' + "".join(parts) + "</div>"
+    # data-case labels the cell once the grid stacks into cards on a phone,
+    # where the column headers are gone.
+    return (f'<div class="cell cell-{v}" data-case="{label}">'
+            + "".join(parts) + "</div>")
 
 
 def hero(d):
-    """The attack, before any tool has an opinion about it."""
-    vuln = next(c for c in d["cases"] if c["id"] == "vulnerable")
-    first, last = vuln.get("excerpt", [1, 40])
+    """The attack, before any tool has an opinion about it.
+
+    Interactive: each step selects the lines it is about, and the panel can
+    swap to the fixed contract in place so the two statements visibly move
+    above the call. Both listings are rendered up front and one is hidden, so
+    swapping is instant and needs no second source of truth.
+    """
+    cases = {c["id"]: c for c in d["cases"]}
+    vuln, safe = cases["vulnerable"], cases.get("safe")
+
+    def listing(case, hidden=False):
+        first, last = case.get("excerpt", [1, 40])
+        tone = "safe" if case["id"] == "safe" else ""
+        return (f'<div class="codewrap" data-which="{case["id"]}"'
+                f'{" hidden" if hidden else ""}'
+                f' data-file="{html.escape(case["file"], quote=True)}">'
+                + code_block(case["source"], case["highlight_lines"],
+                             first, last, tone=tone,
+                             prop=[case.get("property_line")])
+                + "</div>")
+
+    listings = listing(vuln) + (listing(safe, hidden=True) if safe else "")
 
     steps = "".join(
         # Step text is authored content from merge.py, not tool output, so its
         # inline <code>/<em> markup is intentional and passes through.
-        f'<li><span class="stepn">{n}</span>'
-        f'<span><b>{html.escape(title)}</b>{body}</span></li>'
-        for n, (title, body) in enumerate(d.get("exploit", []), 1))
+        f'<li><button class="step" type="button" aria-pressed="false" '
+        f'data-lines="{",".join(str(x) for x in lines)}">'
+        f'<span class="stepn">{n}</span>'
+        f'<span class="steptext"><b>{html.escape(title)}</b>{body}</span>'
+        f'</button></li>'
+        for n, (title, body, lines) in enumerate(
+            (s if len(s) == 3 else (*s, []) for s in d.get("exploit", [])), 1))
 
     note = (f'<p class="note">{d["exploit_note"]}</p>'
             if d.get("exploit_note") else "")
 
-    n_steps = len(d.get("exploit", []))
     return f"""<section class="hero">
 <div class="lead rise" style="--i:0">
   <div class="eyebrow">Reentrancy · Solidity 0.8.26</div>
@@ -469,14 +720,15 @@ def hero(d):
   <div class="prop"><span class="k">the property, in both contracts</span>
   <span class="v">{solidity(d["property"])}</span></div>
 </div>
-<div class="panel rise" style="--i:1">
-  <div class="ph"><span>contracts/VulnerableVault.sol</span>
-  <b>withdraw()</b></div>
-  {code_block(vuln["source"], vuln["highlight_lines"], first, last,
-              prop=[vuln.get("property_line")])}
+<div class="panel rise" id="codepanel" style="--i:1">
+  <div class="ph"><span class="fname">{html.escape(vuln["file"])}</span>
+  <button class="swap" type="button" aria-pressed="false">show the fix</button>
+  </div>
+  {listings}
 </div>
 <div class="panel rise" style="--i:2">
-  <div class="ph"><span>how it is drained</span><b>{n_steps} steps</b></div>
+  <div class="ph"><span>how it is drained</span>
+  <b class="hint">tap · ← →</b></div>
   <ol class="steps">{steps}</ol>
   {note}
 </div>
@@ -486,21 +738,26 @@ def hero(d):
 def render(d):
     cases = d["cases"]
 
-    g = ['<div class="hd">Tool</div>']
+    g = ['<div class="hd hd-corner">Tool</div>']
     for c in cases:
         g.append(f'<div class="hd">{html.escape(c["title"])}'
                  f'<small>{html.escape(c["subtitle"])}</small></div>')
     for t in d["tools"]:
         cap = ('<div class="cap cap-yes">can prove</div>' if t.get("can_prove")
                else '<div class="cap cap-no">cannot prove</div>')
-        g.append(f'<div class="toolcell"><strong>'
-                 f'{html.escape(t["name"])}</strong>'
-                 f'<div class="tech">{html.escape(t["technique"])}</div>'
-                 f'<div class="ver" title="{html.escape(str(t["version"]), quote=True)}">'
-                 f'{html.escape(short_version(t["version"]))}</div>'
-                 f'{cap}</div>')
+        # Each tool is wrapped in a .row. On a wide screen the wrapper is
+        # `display:contents`, so the cells sit in the grid exactly as before;
+        # on a phone the grid stacks and the wrapper becomes the card that
+        # keeps a tool and its two verdicts together.
+        row = [f'<div class="toolcell"><strong>'
+               f'{html.escape(t["name"])}</strong>'
+               f'<div class="tech">{html.escape(t["technique"])}</div>'
+               f'<div class="ver" title="{html.escape(str(t["version"]), quote=True)}">'
+               f'{html.escape(short_version(t["version"]))}</div>'
+               f'{cap}</div>']
         for c in cases:
-            g.append(cell(t["results"][c["id"]]))
+            row.append(cell(t["results"][c["id"]], c["title"]))
+        g.append('<div class="row">' + "".join(row) + "</div>")
 
     srcs = "".join(
         f'<div class="panel"><div class="ph">'
@@ -541,7 +798,7 @@ def render(d):
 <span>commit {commit}</span>
 <span>{versions}</span>
 </footer></div>
-<script>{AUTOFIT_JS}</script>
+<script>{PAGE_JS}</script>
 </body></html>"""
 
 

@@ -1,25 +1,40 @@
 {
-  "generated_at": "2026-09-12T15:56:27+00:00",
-  "commit": "7393dc4",
-  "commit_full": "7393dc40a027b11ba67a30fc23347e2d627d108a",
-  "repo": "",
+  "generated_at": "2026-09-13T15:40:50+00:00",
+  "commit": "3990cc4",
+  "commit_full": "3990cc4951e3341d0ad016c2ecb42836dfb7b217",
+  "repo": "git@github.com:bzp99/reentrancy-verification-demo.git",
   "property": "assert(totalDeposits <= address(this).balance)",
   "exploit": [
     [
       "Deposit once",
-      "A contract deposits 1 ether."
+      "A contract deposits 1 ether and the vault records it.",
+      [
+        10,
+        11
+      ]
     ],
     [
       "Call withdraw()",
-      "The vault sends it \u2013 <em>before</em> zeroing the balance."
+      "The vault reads that balance, and the check passes.",
+      [
+        15,
+        16
+      ]
     ],
     [
       "Re-enter on receive",
-      "Receiving ether runs the attacker's code, which calls <code>withdraw()</code> again \u2013 the balance is still 1 ether."
+      "Ether is sent <em>before</em> the balance is zeroed. Receiving it runs the attacker's code, which calls <code>withdraw()</code> again.",
+      [
+        20
+      ]
     ],
     [
       "Repeat until drained",
-      "Every pass pays out again against the same stale balance."
+      "The writes that would have stopped this run too late \u2013 every pass pays out again against the same stale balance.",
+      [
+        23,
+        24
+      ]
     ]
   ],
   "exploit_note": "June 2016: this pattern drained ~3.6M ETH from The DAO.",
@@ -36,7 +51,7 @@
       ],
       "property_line": 27,
       "excerpt": [
-        14,
+        9,
         27
       ],
       "source": "// SPDX-License-Identifier: MIT\npragma solidity 0.8.26;\n\n/// @notice Deliberately vulnerable. Mirrors the DAO withdrawal pattern.\ncontract VulnerableVault {\n    mapping(address => uint256) public balances;\n    uint256 public totalDeposits;\n\n    function deposit() external payable {\n        balances[msg.sender] += msg.value;\n        totalDeposits += msg.value;\n    }\n\n    function withdraw() external {\n        uint256 amount = balances[msg.sender];\n        require(amount > 0, \"nothing to withdraw\");\n\n        // Interaction before effects: control transfers to an unknown callee\n        // which may re-enter withdraw() while balances[msg.sender] is stale.\n        (bool ok, ) = msg.sender.call{value: amount}(\"\");\n        require(ok, \"transfer failed\");\n\n        balances[msg.sender] = 0;\n        totalDeposits -= amount;\n\n        /// @dev Solvency invariant: the vault never owes more than it holds.\n        assert(totalDeposits <= address(this).balance);\n    }\n}\n"
@@ -53,7 +68,7 @@
       ],
       "property_line": 25,
       "excerpt": [
-        14,
+        9,
         25
       ],
       "source": "// SPDX-License-Identifier: MIT\npragma solidity 0.8.26;\n\n/// @notice Checks-effects-interactions. Same invariant, same assertion.\ncontract SafeVault {\n    mapping(address => uint256) public balances;\n    uint256 public totalDeposits;\n\n    function deposit() external payable {\n        balances[msg.sender] += msg.value;\n        totalDeposits += msg.value;\n    }\n\n    function withdraw() external {\n        uint256 amount = balances[msg.sender];\n        require(amount > 0, \"nothing to withdraw\");\n\n        balances[msg.sender] = 0;\n        totalDeposits -= amount;\n\n        (bool ok, ) = msg.sender.call{value: amount}(\"\");\n        require(ok, \"transfer failed\");\n\n        /// @dev Solvency invariant: the vault never owes more than it holds.\n        assert(totalDeposits <= address(this).balance);\n    }\n}\n"
@@ -86,7 +101,7 @@
               "balances[msg.sender] = 0  L23"
             ]
           ],
-          "duration_ms": 606
+          "duration_ms": 602
         },
         "safe": {
           "verdict": "no_finding",
@@ -99,7 +114,7 @@
               "low-level-calls"
             ]
           ],
-          "duration_ms": 541
+          "duration_ms": 526
         }
       }
     },
@@ -136,7 +151,7 @@
               "3 transactions, 300s"
             ]
           ],
-          "duration_ms": 310496
+          "duration_ms": 309687
         },
         "safe": {
           "verdict": "no_finding",
@@ -153,7 +168,7 @@
               "3 total, 2 SWC-107 pattern warnings with no write after the call"
             ]
           ],
-          "duration_ms": 307173
+          "duration_ms": 284735
         }
       }
     },
@@ -182,7 +197,7 @@
               "Eldarica"
             ]
           ],
-          "duration_ms": 3250
+          "duration_ms": 3024
         },
         "safe": {
           "verdict": "proved",
@@ -203,7 +218,7 @@
               "SafeVault.sol:25:9"
             ]
           ],
-          "duration_ms": 3051
+          "duration_ms": 2922
         }
       }
     }

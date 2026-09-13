@@ -115,6 +115,34 @@ Two details that took some care:
   what is left and scales the block to close the gap exactly. Without
   JavaScript the breakpoints still apply.
 
+### Things you can click
+
+The page is walkable, which matters both for presenting it and for a visitor
+reading it alone. All of it is progressive enhancement: with JavaScript off the
+document is the same, just static.
+
+- **Tap an exploit step** and the listing lights exactly the lines that step is
+  about, dimming everything else, so the attack is told *against* the code
+  rather than beside it. `←` and `→` walk the steps, `Esc` clears – the useful
+  part when presenting, since it needs no cursor.
+- **"Show the fix"** swaps `VulnerableVault` for `SafeVault` in the same panel,
+  so the two statements are seen to move above the call instead of being
+  described as having moved.
+- **"What it reported"** on a hollow cell reveals what the tool actually said.
+  The cell stays visually empty, because that emptiness is the argument, but
+  the detail is one tap away. This replaced a `title` tooltip, which no touch
+  device can show at all.
+- **Tapping a listing** un-dims it, since touch has no hover.
+
+### On a phone
+
+Below 980px the three-column hero stacks and the verdict table becomes one card
+per tool, each verdict labelled with the contract it refers to, because the
+column headers are gone. Selecting a step scrolls the lit lines into view,
+since the listing sits above the steps on a narrow screen. The auto-fit scaling
+is disabled there: on a phone there is no fold to keep anything above, and
+scrolling is the right answer rather than shrinking the page to illegibility.
+
 Syntax highlighting is a ~40-line tokenizer in `render.py` rather than a
 library, because the page must stay self-contained with no network dependency.
 Ligatures are explicitly disabled: a coding font renders `=>` as one glyph and

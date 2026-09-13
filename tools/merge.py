@@ -27,30 +27,41 @@ CASES = [
      "file": "contracts/VulnerableVault.sol",
      "highlight_lines": [20, 23, 24],
      "property_line": 27,
-     # The whole withdraw() body, shown up top as the thing being attacked.
-     "excerpt": [14, 27]},
+     # deposit() through withdraw(): the attack is told against this excerpt,
+     # and every exploit step below points at lines inside it.
+     "excerpt": [9, 27]},
     {"id": "safe", "title": "SafeVault",
      "subtitle": "Checks-effects-interactions",
      "file": "contracts/SafeVault.sol",
      "highlight_lines": [18, 19, 21],
      "property_line": 25,
-     "excerpt": [14, 25]},
+     "excerpt": [9, 25]},
 ]
 
 PROPERTY = "assert(totalDeposits <= address(this).balance)"
 
 # The attack, in the fewest steps that still make it land. Content, not
 # presentation, so it lives here rather than in the renderer.
+#
+# The third field is the lines of VulnerableVault.sol that the step is about.
+# Selecting a step highlights exactly those, so the attack can be walked
+# through against the code instead of described beside it. They must lie
+# inside the case's `excerpt` range or the highlight points off-screen.
 EXPLOIT = [
     ("Deposit once",
-     "A contract deposits 1 ether."),
+     "A contract deposits 1 ether and the vault records it.",
+     [10, 11]),
     ("Call withdraw()",
-     "The vault sends it – <em>before</em> zeroing the balance."),
+     "The vault reads that balance, and the check passes.",
+     [15, 16]),
     ("Re-enter on receive",
-     "Receiving ether runs the attacker's code, which calls "
-     "<code>withdraw()</code> again – the balance is still 1 ether."),
+     "Ether is sent <em>before</em> the balance is zeroed. Receiving it runs "
+     "the attacker's code, which calls <code>withdraw()</code> again.",
+     [20]),
     ("Repeat until drained",
-     "Every pass pays out again against the same stale balance."),
+     "The writes that would have stopped this run too late – every pass "
+     "pays out again against the same stale balance.",
+     [23, 24]),
 ]
 
 EXPLOIT_NOTE = "June 2016: this pattern drained ~3.6M ETH from The DAO."
